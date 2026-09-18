@@ -799,7 +799,7 @@ footer a:hover{color:#fff;}
       <strong style="display:block;color:var(--green-dark);margin-bottom:6px;font-size:15.5px;">Gobernación de Sucre</strong>
       <span style="color:var(--ink-soft);font-size:15px;">Calle 25 No. 25B - 35, Av. Las Peñitas, Sincelejo</span>
     </div>
-    <a href="https://share.google/bXBLvZA66CaIXUOl7" target="_blank" rel="noopener" class="btn btn-primary" style="width:100%;">Ver en Google Maps</a>
+    <a href="https://maps.app.goo.gl/dDxtHcxBFacRiJXq9" target="_blank" rel="noopener" class="btn btn-primary" style="width:100%;">Ver en Google Maps</a>
   </div>
 </div>
 
@@ -844,12 +844,14 @@ footer a:hover{color:#fff;}
 
     <div id="apoyo-step-result" hidden>
       <h3>Listo, así queda</h3>
-      <canvas id="apoyo-canvas"></canvas>
+      <canvas id="apoyo-canvas" style="display:none;"></canvas>
+      <img id="apoyo-result-img" alt="Foto con el marco de la Gran Donatón" style="width:100%;border-radius:14px;display:block;">
       <div class="apoyo-actions">
         <button class="btn btn-outline" onclick="resetApoyoModal()">Tomar otra</button>
-        <button class="btn btn-primary" onclick="downloadApoyoPhoto()">Descargar foto</button>
+        <button class="btn btn-primary" onclick="downloadApoyoPhoto()">Guardar / Compartir</button>
       </div>
       <p class="apoyo-status" id="apoyo-status"></p>
+      <p class="apoyo-hint">En el celular también puedes mantener presionada la foto de arriba y elegir "Guardar imagen".</p>
     </div>
   </div>
 </div>
@@ -955,6 +957,8 @@ function resetApoyoModal(){
   if(fileInput) fileInput.value = '';
   const statusEl = document.getElementById('apoyo-status');
   if(statusEl) statusEl.textContent = '';
+  const resultImg = document.getElementById('apoyo-result-img');
+  if(resultImg) resultImg.removeAttribute('src');
 }
 
 function handleApoyoFile(evt){
@@ -1054,7 +1058,11 @@ function drawApoyoFrame(photoImg){
     ctx.font = '500 28px "Work Sans", sans-serif';
     ctx.fillStyle = '#CFE3D6';
     ctx.fillText('Banco de Alimentos de Sucre', W / 2, SAFE_BOTTOM - 20);
+  }
 
+  function revealApoyoResult(){
+    const resultImg = document.getElementById('apoyo-result-img');
+    if(resultImg) resultImg.src = canvas.toDataURL('image/png');
     document.getElementById('apoyo-step-pick').hidden = true;
     document.getElementById('apoyo-step-result').hidden = false;
   }
@@ -1071,11 +1079,13 @@ function drawApoyoFrame(photoImg){
       const r = Math.min(maxW / logo.width, maxH / logo.height);
       const lw = logo.width * r, lh = logo.height * r;
       ctx.drawImage(logo, chipX + (chipW - lw) / 2, chipY + (chipH - lh) / 2, lw, lh);
+      revealApoyoResult();
     };
-    logo.onerror = finishText;
+    logo.onerror = function(){ finishText(); revealApoyoResult(); };
     logo.src = logoEl.src;
   } else {
     finishText();
+    revealApoyoResult();
   }
 }
 
@@ -1092,24 +1102,56 @@ function roundRect(ctx, x, y, w, h, r){
 async function downloadApoyoPhoto(){
   const canvas = document.getElementById('apoyo-canvas');
   const statusEl = document.getElementById('apoyo-status');
+  if(statusEl) statusEl.textContent = 'Preparando…';
+
   canvas.toBlob(async function(blob){
     if(!blob){ if(statusEl) statusEl.textContent = 'No se pudo generar la imagen.'; return; }
-    let downloads = null;
+    const filename = 'yo-apoyo-donaton-sucre.png';
+
+    // 1) Menú nativo de compartir/guardar — en el celular esto abre la
+    // hoja de opciones del sistema con "Guardar en galería / Fotos".
+    try{
+      const file = new File([blob], filename, { type: 'image/png' });
+      if(navigator.canShare && navigator.canShare({ files: [file] })){
+        await navigator.share({ files: [file], title: 'Yo apoyo la Gran Donatón' });
+        if(statusEl) statusEl.textContent = '';
+        return;
+      }
+    }catch(err){
+      if(err && err.name === 'AbortError'){ if(statusEl) statusEl.textContent = ''; return; }
+      // si falla, seguimos probando las otras vías
+    }
+
+    // 2) Capacidad de descargas del visor de artefactos (cuando está disponible)
     try{
       if(window.claude && typeof window.claude.use === 'function'){
-        downloads = await window.claude.use('downloads');
+        const downloads = await window.claude.use('downloads');
+        if(downloads){
+          await downloads.save({ filename, data: blob });
+          if(statusEl) statusEl.textContent = 'Imagen guardada.';
+          return;
+        }
       }
-    }catch(e){}
-    if(downloads){
-      try{
-        await downloads.save({ filename: 'yo-apoyo-donaton-sucre.png', data: blob });
-        if(statusEl) statusEl.textContent = 'Imagen guardada.';
-        return;
-      }catch(err){
-        if(err && err.code === 'declined'){ if(statusEl) statusEl.textContent = ''; return; }
-      }
+    }catch(err){
+      if(err && err.code === 'declined'){ if(statusEl) statusEl.textContent = ''; return; }
     }
-    if(statusEl) statusEl.textContent = 'Mantén presionada la imagen para guardarla en tu galería.';
+
+    // 3) Descarga clásica del navegador (funciona en la mayoría de desktop)
+    try{
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+      if(statusEl) statusEl.textContent = 'Si no se descargó sola, mantén presionada la imagen de arriba.';
+      return;
+    }catch(err){}
+
+    // 4) Último recurso
+    if(statusEl) statusEl.textContent = 'Mantén presionada la imagen de arriba y elige "Guardar imagen".';
   }, 'image/png');
 }
 </script>
