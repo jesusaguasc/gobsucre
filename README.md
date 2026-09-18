@@ -6,7 +6,7 @@ Repositorio con las landing pages de la Gobernación de Sucre. Cada proyecto viv
 
 | Carpeta | Descripción | URL (GitHub Pages) |
 |---|---|---|
-| `banco-alimentos-sucre/` | Landing del Banco de Alimentos de Sucre — Gran Donatón 2026 | `https://<usuario>.github.io/<repo>/banco-alimentos-sucre/` |
+| `bancodealimentos/` | Landing del Banco de Alimentos de Sucre — Gran Donatón 2026 | `https://<usuario>.github.io/<repo>/bancodealimentos/` |
 
 ## Cómo agregar una nueva landing page
 
